@@ -116,68 +116,52 @@ final class DecodeWorker implements Callable<Integer> {
     Files.write(buildOutputPath(input, ".txt"), resultTexts, StandardCharsets.UTF_8);
   }
 
-  private Result[] decode(URI uri, Map<DecodeHintType,?> hints) throws IOException {
-    BufferedImage image = ImageReader.readImage(uri);
-
-    LuminanceSource source;
-    if (config.crop == null) {
-      source = new BufferedImageLuminanceSource(image);
-    } else {
-      List<Integer> crop = config.crop;
-      source = new BufferedImageLuminanceSource(
-          image, crop.get(0), crop.get(1), crop.get(2), crop.get(3));
-    }
-
-    BinaryBitmap bitmap = new BinaryBitmap(new HybridBinarizer(source));
-    if (config.dumpBlackPoint) {
-      dumpBlackPoint(uri, image, bitmap);
-    }
-
-    MultiFormatReader multiFormatReader = new MultiFormatReader();
-    Result[] results;
+  private Result[] decode(URI uri, Map<DecodeHintType,?> hints) {
     try {
+      BufferedImage image = ImageReader.readImage(uri);
+
+      LuminanceSource source;
+      if (config.crop == null) {
+        source = new BufferedImageLuminanceSource(image);
+      } else {
+        List<Integer> crop = config.crop;
+        source = new BufferedImageLuminanceSource(
+            image, crop.get(0), crop.get(1), crop.get(2), crop.get(3));
+      }
+
+      BinaryBitmap bitmap = new BinaryBitmap(new HybridBinarizer(source));
+      if (config.dumpBlackPoint) {
+        dumpBlackPoint(uri, image, bitmap);
+      }
+
+      MultiFormatReader multiFormatReader = new MultiFormatReader();
+      Result[] results;
+
       if (config.multi) {
         MultipleBarcodeReader reader = new GenericMultipleBarcodeReader(multiFormatReader);
         results = reader.decodeMultiple(bitmap, hints);
       } else {
         results = new Result[]{multiFormatReader.decode(bitmap, hints)};
       }
-    } catch (NotFoundException ignored) {
-      System.out.println(uri + ": No barcode found");
-      return null;
-    }
-
     if (config.brief) {
       System.out.println(uri + ": Success");
     } else {
       StringWriter output = new StringWriter();
       for (Result result : results) {
         ParsedResult parsedResult = ResultParser.parseResult(result);
-        output.write(uri +
-            " (format: " + result.getBarcodeFormat() +
-            ", type: " + parsedResult.getType() + "):\n" +
-            "Raw result:\n" +
-            result.getText() + "\n" +
-            "Parsed result:\n" +
-            parsedResult.getDisplayResult() + "\n");
-        ResultPoint[] resultPoints = result.getResultPoints();
-        int numResultPoints = resultPoints.length;
-        output.write("Found " + numResultPoints + " result points.\n");
-        for (int pointIndex = 0; pointIndex < numResultPoints; pointIndex++) {
-          ResultPoint rp = resultPoints[pointIndex];
-          if (rp != null) {
-            output.write("  Point " + pointIndex + ": (" + rp.getX() + ',' + rp.getY() + ')');
-            if (pointIndex != numResultPoints - 1) {
-              output.write('\n');
-            }
-          }
-        }
-        output.write('\n');
+        output.write("{statusCode: 200,code: " + result.getText() + "}");
+        ResultPoint[] resultPoints  = null;
       }
       System.out.println(output);
     }
-
     return results;
+    } catch (NotFoundException ignored) {
+      System.out.println("{statusCode: 204}");
+      return null;
+    } catch (IOException ioException) {
+      System.out.println("{statusCode: 404}");
+      return null;
+    }
   }
 
   /**
